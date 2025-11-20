@@ -32,7 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
       card.dataset.activityName = name;
 
       const participantsHtml = (act.participants && act.participants.length)
-        ? act.participants.map(p => `<li class="participant-item">${escapeHtml(p)}</li>`).join('')
+        ? act.participants.map(p => `<li class="participant-item" data-email="${escapeHtml(p)}">${escapeHtml(p)}<button class="remove-btn" title="Unregister" data-email="${escapeHtml(p)}">&times;</button></li>`).join('')
         : '<li class="no-participants">No participants yet</li>';
 
       card.innerHTML = `
@@ -58,6 +58,71 @@ document.addEventListener('DOMContentLoaded', () => {
       activitySelect.appendChild(opt);
     });
   }
+
+  // Delegate click for remove/unregister buttons
+  activitiesList.addEventListener('click', (e) => {
+    const btn = e.target.closest('.remove-btn');
+    if (!btn) return;
+
+    const li = btn.closest('.participant-item');
+    if (!li) return;
+
+    const email = btn.dataset.email;
+    // find activity card ancestor
+    const card = li.closest('.activity-card');
+    if (!card) return;
+
+    const activity = card.dataset.activityName;
+    if (!activity || !email) return;
+
+    // Optimistic UI: disable button while request in progress
+    btn.disabled = true;
+    btn.textContent = '…';
+
+    fetch(`/activities/${encodeURIComponent(activity)}/participants?email=${encodeURIComponent(email)}`, {
+      method: 'DELETE'
+    })
+      .then(async res => {
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.detail || body.message || 'Failed to unregister');
+        return body;
+      })
+      .then(json => {
+        // remove list item
+        const ul = card.querySelector('.participants-list');
+        li.remove();
+        // if list empty, show placeholder
+        if (!ul.querySelector('.participant-item')) {
+          const placeholder = document.createElement('li');
+          placeholder.className = 'no-participants';
+          placeholder.textContent = 'No participants yet';
+          ul.appendChild(placeholder);
+        }
+
+        // update count badge
+        const countSpan = card.querySelector('.participant-count');
+        const current = parseInt(countSpan.textContent.replace(/[^\\d]/g, ''), 10) || 0;
+        countSpan.textContent = `(${Math.max(0, current - 1)})`;
+
+        // update select option
+        const opt = Array.from(activitySelect.options).find(o => o.value === activity);
+        if (opt) {
+          const matches = opt.textContent.match(/\((\d+)\/(\d+)\)/);
+          if (matches) {
+            const newCount = Math.max(0, parseInt(matches[1], 10) - 1);
+            const max = matches[2];
+            opt.textContent = `${activity} (${newCount}/${max})`;
+          }
+        }
+
+        showMessage(json.message || 'Unregistered successfully', 'success');
+      })
+      .catch(err => {
+        showMessage(err.message || 'Error unregistering', 'error');
+        btn.disabled = false;
+        btn.textContent = '×';
+      });
+  });
 
   // Fetch activities on load
   fetch('/activities')
@@ -104,7 +169,14 @@ document.addEventListener('DOMContentLoaded', () => {
           if (placeholder) placeholder.remove();
           const li = document.createElement('li');
           li.className = 'participant-item';
+          li.dataset.email = email;
           li.textContent = email;
+          const removeBtn = document.createElement('button');
+          removeBtn.className = 'remove-btn';
+          removeBtn.title = 'Unregister';
+          removeBtn.dataset.email = email;
+          removeBtn.innerHTML = '&times;';
+          li.appendChild(removeBtn);
           ul.appendChild(li);
           // update count badge
           const countSpan = card.querySelector('.participant-count');
