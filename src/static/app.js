@@ -88,34 +88,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return body;
       })
       .then(json => {
-        // remove list item
-        const ul = card.querySelector('.participants-list');
-        li.remove();
-        // if list empty, show placeholder
-        if (!ul.querySelector('.participant-item')) {
-          const placeholder = document.createElement('li');
-          placeholder.className = 'no-participants';
-          placeholder.textContent = 'No participants yet';
-          ul.appendChild(placeholder);
-        }
-
-        // update count badge
-        const countSpan = card.querySelector('.participant-count');
-        const current = parseInt(countSpan.textContent.replace(/[^\\d]/g, ''), 10) || 0;
-        countSpan.textContent = `(${Math.max(0, current - 1)})`;
-
-        // update select option
-        const opt = Array.from(activitySelect.options).find(o => o.value === activity);
-        if (opt) {
-          const matches = opt.textContent.match(/\((\d+)\/(\d+)\)/);
-          if (matches) {
-            const newCount = Math.max(0, parseInt(matches[1], 10) - 1);
-            const max = matches[2];
-            opt.textContent = `${activity} (${newCount}/${max})`;
-          }
-        }
-
         showMessage(json.message || 'Unregistered successfully', 'success');
+        // re-fetch activities to keep UI consistent with server
+        loadActivities();
       })
       .catch(err => {
         showMessage(err.message || 'Error unregistering', 'error');
@@ -124,17 +99,22 @@ document.addEventListener('DOMContentLoaded', () => {
       });
   });
 
-  // Fetch activities on load
-  fetch('/activities')
-    .then(res => {
-      if (!res.ok) throw new Error('Failed to load activities');
-      return res.json();
-    })
-    .then(data => renderActivities(data))
-    .catch(err => {
-      activitiesList.innerHTML = '<p class="error">Unable to load activities.</p>';
-      console.error(err);
-    });
+  // Helper to load activities and render
+  function loadActivities() {
+    return fetch('/activities')
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to load activities');
+        return res.json();
+      })
+      .then(data => renderActivities(data))
+      .catch(err => {
+        activitiesList.innerHTML = '<p class="error">Unable to load activities.</p>';
+        console.error(err);
+      });
+  }
+
+  // Initial load
+  loadActivities();
 
   // Handle signup
   signupForm.addEventListener('submit', (e) => {
@@ -158,44 +138,8 @@ document.addEventListener('DOMContentLoaded', () => {
       })
       .then(json => {
         showMessage(json.message || 'Signed up successfully', 'success');
-
-        // Update UI: find card and participants list
-        const card = document.querySelector(`.activity-card[data-activity-name="${CSS.escape(activity)}"]`)
-                   || Array.from(document.querySelectorAll('.activity-card')).find(c => c.dataset.activityName === activity);
-        if (card) {
-          const ul = card.querySelector('.participants-list');
-          // remove "no participants" placeholder if present
-          const placeholder = ul.querySelector('.no-participants');
-          if (placeholder) placeholder.remove();
-          const li = document.createElement('li');
-          li.className = 'participant-item';
-          li.dataset.email = email;
-          li.textContent = email;
-          const removeBtn = document.createElement('button');
-          removeBtn.className = 'remove-btn';
-          removeBtn.title = 'Unregister';
-          removeBtn.dataset.email = email;
-          removeBtn.innerHTML = '&times;';
-          li.appendChild(removeBtn);
-          ul.appendChild(li);
-          // update count badge
-          const countSpan = card.querySelector('.participant-count');
-          const current = parseInt(countSpan.textContent.replace(/[^\d]/g, ''), 10) || 0;
-          countSpan.textContent = `(${current + 1})`;
-        }
-
-        // Update option in select to reflect new count
-        const opt = Array.from(activitySelect.options).find(o => o.value === activity);
-        if (opt) {
-          // try parse counts from label, else just append +1 display
-          const matches = opt.textContent.match(/\((\d+)\/(\d+)\)/);
-          if (matches) {
-            const newCount = parseInt(matches[1], 10) + 1;
-            const max = matches[2];
-            opt.textContent = `${activity} (${newCount}/${max})`;
-          }
-        }
-
+        // re-fetch activities to keep UI consistent with server
+        loadActivities();
         signupForm.reset();
       })
       .catch(err => {
